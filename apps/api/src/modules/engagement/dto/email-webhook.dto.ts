@@ -1,10 +1,39 @@
 import { MessageEventType } from "@prisma/client/index";
-import { IsDateString, IsEnum, IsNotEmpty, IsObject, IsOptional, IsString, MaxLength } from "class-validator";
+import { IsDateString, IsIn, IsObject } from "class-validator";
+
+export const resendEmailEventTypes = [
+  "email.sent",
+  "email.delivered",
+  "email.opened",
+  "email.clicked",
+  "email.bounced",
+  "email.complained"
+] as const;
+
+export type ResendEmailEventType = (typeof resendEmailEventTypes)[number];
+
+export type ResendEmailEventData = {
+  email_id: string;
+  created_at?: string;
+  from?: string;
+  to?: string[];
+  subject?: string;
+  tags?: Record<string, string>;
+  bounce?: Record<string, unknown>;
+  click?: Record<string, unknown>;
+  [key: string]: unknown;
+};
 
 export class EmailWebhookDto {
-  @IsString() @IsNotEmpty() @MaxLength(240) eventId!: string;
-  @IsString() @IsNotEmpty() @MaxLength(240) providerMessageId!: string;
-  @IsEnum(MessageEventType) type!: MessageEventType;
-  @IsDateString({ strict: true }) occurredAt!: string;
-  @IsOptional() @IsObject() metadata?: Record<string, unknown>;
+  @IsIn([...resendEmailEventTypes]) type!: ResendEmailEventType;
+  @IsDateString({ strict: true }) created_at!: string;
+  @IsObject() data!: ResendEmailEventData;
 }
+
+export type NormalizedEmailWebhook = {
+  eventId: string;
+  providerMessageId: string;
+  type: MessageEventType;
+  occurredAt: string;
+  metadata: Record<string, unknown>;
+};

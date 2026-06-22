@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import {
   CadenceEnrollmentStatus,
   CadencePhase,
@@ -18,7 +18,7 @@ import {
   RegistrationStatus,
   ScheduledActionStatus
 } from "@prisma/client/index";
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHash } from "node:crypto";
 import { appConfig } from "../config/app.config.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { buildPostEventSchedule } from "./cadence-schedule.js";
@@ -28,6 +28,7 @@ import { type EmailWebhookDto } from "./dto/email-webhook.dto.js";
 import { type RecordInboundMessageDto } from "./dto/record-inbound-message.dto.js";
 import { type RecordInterestDto } from "./dto/record-interest.dto.js";
 import { type WithdrawConsentDto } from "./dto/withdraw-consent.dto.js";
+import { normalizeResendEmailWebhook, type ResendWebhookHeaders, verifyResendWebhook } from "./resend-webhook.js";
 
 const transitions: Record<RegistrationStatus, RegistrationStatus[]> = {
   REGISTERED: [RegistrationStatus.CONFIRMED, RegistrationStatus.DECLINED],
@@ -172,19 +173,20 @@ export class EngagementService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  async processEmailWebhook(dto: EmailWebhookDto, timestamp: string, signature: string) {
-    verifyWebhook(dto, timestamp, signature);
-    const message = await this.prisma.message.findUnique({ where: { providerMessageId: dto.providerMessageId } });
+  async processEmailWebhook(dto: EmailWebhookDto, rawBody: Buffer | undefined, headers: ResendWebhookHeaders) {
+    verifyResendWebhook(rawBody, headers, appConfig.webhookSigningSecret);
+    const event = normalizeResendEmailWebhook(dto, headers.id);
+    const message = await this.prisma.message.findUnique({ where: { providerMessageId: event.providerMessageId } });
     if (!message) throw new NotFoundException("Message not found");
-    const payloadHash = createHash("sha256").update(JSON.stringify(dto)).digest("hex");
+    const payloadHash = createHash("sha256").update(rawBody!).digest("hex");
     return this.prisma.$transaction(async (tx) => {
-      const receipt = await tx.webhookReceipt.upsert({ where: { provider_providerEventId: { provider: "email", providerEventId: dto.eventId } }, create: { workspaceId: message.workspaceId, provider: "email", providerEventId: dto.eventId, eventType: dto.type, payloadHash }, update: {} });
+      const receipt = await tx.webhookReceipt.upsert({ where: { provider_providerEventId: { provider: "resend", providerEventId: event.eventId } }, create: { workspaceId: message.workspaceId, provider: "resend", providerEventId: event.eventId, eventType: event.type, payloadHash }, update: {} });
       if (receipt.processedAt) return { duplicate: true };
-      await tx.messageEvent.upsert({ where: { providerEventId: dto.eventId }, create: { messageId: message.id, type: dto.type, providerEventId: dto.eventId, occurredAt: new Date(dto.occurredAt), metadata: dto.metadata as Prisma.InputJsonObject | undefined }, update: {} });
-      const status = dto.type === MessageEventType.BOUNCED || dto.type === MessageEventType.COMPLAINED ? MessageStatus.BOUNCED : dto.type === MessageEventType.DELIVERED ? MessageStatus.DELIVERED : message.status;
-      await tx.message.update({ where: { id: message.id }, data: { status, deliveredAt: dto.type === MessageEventType.DELIVERED ? new Date(dto.occurredAt) : undefined, failedAt: status === MessageStatus.BOUNCED ? new Date(dto.occurredAt) : undefined, failureCode: status === MessageStatus.BOUNCED ? dto.type.toLowerCase() : undefined } });
+      await tx.messageEvent.upsert({ where: { providerEventId: event.eventId }, create: { messageId: message.id, type: event.type, providerEventId: event.eventId, occurredAt: new Date(event.occurredAt), metadata: event.metadata as Prisma.InputJsonObject }, update: {} });
+      const status = event.type === MessageEventType.BOUNCED || event.type === MessageEventType.COMPLAINED ? MessageStatus.BOUNCED : event.type === MessageEventType.DELIVERED ? MessageStatus.DELIVERED : message.status;
+      await tx.message.update({ where: { id: message.id }, data: { status, deliveredAt: event.type === MessageEventType.DELIVERED ? new Date(event.occurredAt) : undefined, failedAt: status === MessageStatus.BOUNCED ? new Date(event.occurredAt) : undefined, failureCode: status === MessageStatus.BOUNCED ? event.type.toLowerCase() : undefined } });
       if (status === MessageStatus.BOUNCED) {
-        await tx.suppression.upsert({ where: { workspaceId_leadId_purpose_channel: { workspaceId: message.workspaceId, leadId: message.leadId, purpose: message.purpose, channel: message.channel } }, create: { workspaceId: message.workspaceId, leadId: message.leadId, purpose: message.purpose, channel: message.channel, reason: dto.type.toLowerCase() }, update: { active: true, reason: dto.type.toLowerCase() } });
+        await tx.suppression.upsert({ where: { workspaceId_leadId_purpose_channel: { workspaceId: message.workspaceId, leadId: message.leadId, purpose: message.purpose, channel: message.channel } }, create: { workspaceId: message.workspaceId, leadId: message.leadId, purpose: message.purpose, channel: message.channel, reason: event.type.toLowerCase() }, update: { active: true, reason: event.type.toLowerCase() } });
       }
       await tx.webhookReceipt.update({ where: { id: receipt.id }, data: { processedAt: new Date() } });
       return { duplicate: false };
@@ -272,15 +274,6 @@ async function schedulePostEvent(tx: Tx, registration: { id: string; workspaceId
 async function suppressLead(tx: Tx, registration: { workspaceId: string; eventId: string; leadId: string }, purpose: ConsentPurpose, reason: string) {
   await tx.suppression.upsert({ where: { workspaceId_leadId_purpose_channel: { workspaceId: registration.workspaceId, leadId: registration.leadId, purpose, channel: CommunicationChannel.EMAIL } }, create: { workspaceId: registration.workspaceId, leadId: registration.leadId, purpose, channel: CommunicationChannel.EMAIL, reason }, update: { active: true, reason } });
   await tx.consentRecord.updateMany({ where: { eventId: registration.eventId, leadId: registration.leadId, purpose, channel: CommunicationChannel.EMAIL, withdrawnAt: null }, data: { withdrawnAt: new Date(), withdrawnReason: reason } });
-}
-
-function verifyWebhook(dto: EmailWebhookDto, timestamp: string, signature: string) {
-  const parsedTimestamp = Number(timestamp);
-  if (!Number.isFinite(parsedTimestamp) || Math.abs(Date.now() - parsedTimestamp * 1_000) > 300_000) throw new UnauthorizedException("Webhook timestamp is invalid");
-  const expected = createHmac("sha256", appConfig.webhookSigningSecret).update(`${timestamp}.${JSON.stringify(dto)}`).digest("hex");
-  const supplied = signature.replace(/^sha256=/, "");
-  const left = Buffer.from(expected); const right = Buffer.from(supplied);
-  if (left.length !== right.length || !timingSafeEqual(left, right)) throw new UnauthorizedException("Webhook signature is invalid");
 }
 
 function ratio(numerator: number, denominator: number) {

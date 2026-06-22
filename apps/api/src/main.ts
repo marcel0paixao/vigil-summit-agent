@@ -13,7 +13,8 @@ import { appConfig } from "./modules/config/app.config.js";
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ logger: true })
+    new FastifyAdapter({ logger: true }),
+    { rawBody: true }
   );
 
   await app.register(helmet);

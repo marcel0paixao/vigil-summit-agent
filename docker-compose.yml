@@ -75,7 +75,7 @@ services:
       JWT_SECRET: replace-with-local-development-secret
       CREDENTIAL_ENCRYPTION_KEY: replace-with-local-encryption-secret
       INTERNAL_API_TOKEN: replace-with-local-internal-api-token
-      WEBHOOK_SIGNING_SECRET: replace-with-local-webhook-signing-secret
+      WEBHOOK_SIGNING_SECRET: whsec_bG9jYWwtdmlnaWwtc3VtbWl0LXdlYmhvb2stc2VjcmV0
       CALENDAR_PROVIDER: ${CALENDAR_PROVIDER:-demo}
       GOOGLE_CALENDAR_ACCESS_TOKEN: ${GOOGLE_CALENDAR_ACCESS_TOKEN:-}
       GOOGLE_CALENDAR_ID: ${GOOGLE_CALENDAR_ID:-primary}
@@ -111,7 +111,7 @@ services:
       APOLLO_API_KEY: ${APOLLO_API_KEY:-}
       ENGAGEMENT_AI_PROVIDER: ${ENGAGEMENT_AI_PROVIDER:-deterministic}
       ENGAGEMENT_AI_CREDENTIAL_ID: ${ENGAGEMENT_AI_CREDENTIAL_ID:-}
-      ENGAGEMENT_AI_MODEL: ${ENGAGEMENT_AI_MODEL:-claude-sonnet-4-20250514}
+      ENGAGEMENT_AI_MODEL: ${ENGAGEMENT_AI_MODEL:-claude-sonnet-4-6}
     volumes:
       - .:/workspace
       - root-node-modules:/workspace/node_modules

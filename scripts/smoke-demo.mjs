@@ -1,7 +1,9 @@
 const baseUrl = process.env.API_BASE_URL ?? "http://localhost:3000/api";
 const email = `smoke-${Date.now()}@vigil-smoke.test`;
+const adminEmail = process.env.SMOKE_ADMIN_EMAIL ?? "demo-admin@vigil.test";
+const adminPassword = process.env.SMOKE_ADMIN_PASSWORD ?? "VigilDemo2026!ChangeMe";
 
-const login = await request("POST", "/auth/login", { email: "demo-admin@vigil.test", password: "VigilDemo2026!ChangeMe" });
+const login = await request("POST", "/auth/login", { email: adminEmail, password: adminPassword });
 const token = login.accessToken;
 const workspaceId = login.workspace.id;
 const events = await request("GET", `/workspaces/${workspaceId}/events`, undefined, token);
@@ -22,7 +24,12 @@ await request("PATCH", `/workspaces/${workspaceId}/engagement/registrations/${re
 await request("PATCH", `/workspaces/${workspaceId}/engagement/registrations/${registration.registrationId}/status`, { status: "ATTENDED" }, token);
 await request("POST", `/workspaces/${workspaceId}/engagement/interests`, { registrationId: registration.registrationId, kind: "SESSION_ATTENDED", value: "AI security session", source: "OBSERVED", confidence: 1 }, token);
 await request("POST", `/workspaces/${workspaceId}/engagement/messages/inbound`, { registrationId: registration.registrationId, body: "Quero agendar uma reuniao.", providerMessageId: `smoke-reply-${registration.registrationId}` }, token);
-const startsAt = new Date(Date.now() + 10 * 86_400_000); startsAt.setUTCHours(14, 0, 0, 0);
+const slotOffsetMinutes = [...registration.registrationId].reduce(
+  (hash, character) => (hash * 31 + character.charCodeAt(0)) % 525_600,
+  0
+);
+const startsAt = new Date(Date.now() + (30 * 24 * 60 + slotOffsetMinutes) * 60_000);
+startsAt.setUTCSeconds(0, 0);
 const meeting = await request("POST", `/workspaces/${workspaceId}/engagement/meetings`, { registrationId: registration.registrationId, startsAt: startsAt.toISOString(), endsAt: new Date(startsAt.getTime() + 30 * 60_000).toISOString(), timezone: "America/Sao_Paulo", provider: "demo-calendar", providerMeetingId: `smoke-${registration.registrationId}` }, token);
 if (meeting.status !== "BOOKED") throw new Error("Smoke meeting was not booked");
 const dashboard = await request("GET", `/workspaces/${workspaceId}/engagement/dashboard?eventId=${event.id}`, undefined, token);

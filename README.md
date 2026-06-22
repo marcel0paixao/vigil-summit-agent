@@ -78,11 +78,17 @@ GOOGLE_CALENDAR_ACCESS_TOKEN=...
 GOOGLE_CALENDAR_ID=primary
 ENGAGEMENT_AI_PROVIDER=anthropic
 ENGAGEMENT_AI_CREDENTIAL_ID=<encrypted-workspace-credential-id>
-ENGAGEMENT_AI_MODEL=claude-sonnet-4-20250514
+ENGAGEMENT_AI_MODEL=claude-sonnet-4-6
 ```
 
 Provider credentials must never be committed. Real delivery also requires a verified domain and
 provider webhook configuration.
+
+## Deploy
+
+Production images and a Render Blueprint are included. The Blueprint provisions the web, API,
+worker, AI runtime, PostgreSQL, and durable RabbitMQ topology while prompting for provider secrets.
+See [deployment](docs/DEPLOYMENT.md) for costs, activation, provider callbacks, and remote smoke.
 
 ## Quality Gates
 

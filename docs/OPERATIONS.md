@@ -30,3 +30,18 @@ must be approved by the data controller before launch.
 
 Scheduled actions with expired leases are reclaimed. Bounded retries use backoff; RabbitMQ failures
 route to dead-letter queues. Reprocessing is safe where documented idempotency keys exist.
+
+## Production Release
+
+The root `Dockerfile` provides separate immutable targets for API, worker, and web. Database
+migrations run as a pre-deploy command; the idempotent demo seed runs only as the initial deploy
+hook. Provider keys are platform secrets and never Docker build arguments committed to source.
+
+Run the remote journey after each release:
+
+```bash
+API_BASE_URL=https://your-app.example/api \
+SMOKE_ADMIN_EMAIL=demo-admin@vigil.test \
+SMOKE_ADMIN_PASSWORD='<platform secret>' \
+node scripts/smoke-demo.mjs
+```

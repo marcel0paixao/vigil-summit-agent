@@ -25,7 +25,13 @@ config({ path: new URL("../../../.env", import.meta.url), quiet: true });
 process.env.DATABASE_URL ??= "postgresql://flowpilot:flowpilot@localhost:5432/flowpilot";
 
 const prisma = new PrismaClient();
-const demoAdminPassword = "VigilDemo2026!ChangeMe";
+const demoAdminEmail = process.env.DEMO_ADMIN_EMAIL ?? "demo-admin@vigil.test";
+const demoAdminPassword = process.env.DEMO_ADMIN_PASSWORD ?? "VigilDemo2026!ChangeMe";
+const publicAppUrl = process.env.PUBLIC_APP_URL ?? "http://localhost:5173";
+
+if (process.env.NODE_ENV === "production" && !process.env.DEMO_ADMIN_PASSWORD) {
+  throw new Error("DEMO_ADMIN_PASSWORD is required when seeding production");
+}
 
 const personas = [
   {
@@ -68,9 +74,9 @@ async function main(): Promise<void> {
     update: { name: "Vigil.AI" }
   });
   const demoAdmin = await prisma.user.upsert({
-    where: { email: "demo-admin@vigil.test" },
+    where: { email: demoAdminEmail },
     create: {
-      email: "demo-admin@vigil.test",
+      email: demoAdminEmail,
       displayName: "Vigil Demo Administrator",
       passwordHash
     },
@@ -237,8 +243,8 @@ async function main(): Promise<void> {
   console.log("Vigil Summit seed completed");
   console.log(`Workspace ID: ${workspace.id}`);
   console.log(`Event ID: ${event.id}`);
-  console.log(`Public registration: http://localhost:5173/events/${event.id}/register`);
-  console.log(`Demo admin: ${demoAdmin.email} / ${demoAdminPassword}`);
+  console.log(`Public registration: ${publicAppUrl}/events/${event.id}/register`);
+  console.log(`Demo admin: ${demoAdmin.email}`);
 }
 
 main()

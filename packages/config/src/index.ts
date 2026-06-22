@@ -14,12 +14,25 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     nodeEnv: env.NODE_ENV ?? "development",
     logLevel: env.LOG_LEVEL ?? "info",
     databaseUrl: requireEnv(env, "DATABASE_URL"),
-    rabbitmqUrl: requireEnv(env, "RABBITMQ_URL"),
+    rabbitmqUrl: resolveRabbitMqUrl(env),
     redisUrl: requireEnv(env, "REDIS_URL"),
     qdrantUrl: requireEnv(env, "QDRANT_URL"),
     aiOrchestratorUrl: env.AI_ORCHESTRATOR_URL ?? "http://ai-orchestrator:8000",
     aiOrchestratorTimeoutMs: readOptionalPositiveInteger(env, "AI_ORCHESTRATOR_TIMEOUT_MS", 30_000)
   };
+}
+
+export function resolveRabbitMqUrl(env: NodeJS.ProcessEnv = process.env): string {
+  if (env.RABBITMQ_URL) {
+    return env.RABBITMQ_URL;
+  }
+
+  const host = requireEnv(env, "RABBITMQ_HOST");
+  const user = requireEnv(env, "RABBITMQ_USER");
+  const password = requireEnv(env, "RABBITMQ_PASSWORD");
+  const port = env.RABBITMQ_PORT ?? "5672";
+
+  return `amqp://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}`;
 }
 
 function requireEnv(env: NodeJS.ProcessEnv, key: string): string {

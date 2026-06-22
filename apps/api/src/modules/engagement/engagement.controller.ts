@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, Inject, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, Inject, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { WorkspaceRole } from "@prisma/client/index";
 import { WorkspaceRoles } from "../auth/decorators/workspace-roles.decorator.js";
@@ -84,9 +84,11 @@ export class PublicEngagementController {
   @Post("webhooks/email")
   webhook(
     @Body() dto: EmailWebhookDto,
-    @Headers("x-vigil-timestamp") timestamp: string,
-    @Headers("x-vigil-signature") signature: string
+    @Req() request: { rawBody?: Buffer },
+    @Headers("svix-id") id: string,
+    @Headers("svix-timestamp") timestamp: string,
+    @Headers("svix-signature") signature: string
   ) {
-    return this.service.processEmailWebhook(dto, timestamp, signature);
+    return this.service.processEmailWebhook(dto, request.rawBody, { id, timestamp, signature });
   }
 }

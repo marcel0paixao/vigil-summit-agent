@@ -1,5 +1,6 @@
 import "dotenv/config";
 
+import { resolveRabbitMqUrl } from "@flowpilot/config";
 import { z } from "zod";
 
 const schema = z
@@ -9,7 +10,11 @@ const schema = z
     API_PORT: z.coerce.number().int().positive().default(3000),
     CORS_ORIGIN: z.string().default("*"),
     DATABASE_URL: z.string().url(),
-    RABBITMQ_URL: z.string().url(),
+    RABBITMQ_URL: z.string().url().optional(),
+    RABBITMQ_HOST: z.string().optional(),
+    RABBITMQ_PORT: z.coerce.number().int().positive().optional(),
+    RABBITMQ_USER: z.string().optional(),
+    RABBITMQ_PASSWORD: z.string().optional(),
     REDIS_URL: z.string().url(),
     QDRANT_URL: z.string().url(),
     JWT_SECRET: z.string().min(24),
@@ -18,6 +23,17 @@ const schema = z
     WEBHOOK_SIGNING_SECRET: z.string().min(24).optional()
   })
   .superRefine((environment, context) => {
+    if (
+      !environment.RABBITMQ_URL &&
+      (!environment.RABBITMQ_HOST || !environment.RABBITMQ_USER || !environment.RABBITMQ_PASSWORD)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "RABBITMQ_URL or RABBITMQ_HOST, RABBITMQ_USER and RABBITMQ_PASSWORD is required",
+        path: ["RABBITMQ_URL"]
+      });
+    }
+
     if (environment.NODE_ENV !== "production") {
       return;
     }
@@ -53,7 +69,7 @@ export const appConfig = {
   port: parsed.data.API_PORT,
   corsOrigin: parsed.data.CORS_ORIGIN,
   databaseUrl: parsed.data.DATABASE_URL,
-  rabbitmqUrl: parsed.data.RABBITMQ_URL,
+  rabbitmqUrl: resolveRabbitMqUrl(process.env),
   redisUrl: parsed.data.REDIS_URL,
   qdrantUrl: parsed.data.QDRANT_URL,
   jwtSecret: parsed.data.JWT_SECRET,

@@ -1,0 +1,177 @@
+services:
+  - type: web
+    runtime: docker
+    name: vigil-summit-web
+    plan: starter
+    region: ohio
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: node scripts/serve-web.mjs
+    healthCheckPath: /
+    envVars:
+      - key: API_UPSTREAM_HOST
+        fromService:
+          type: web
+          name: vigil-summit-api
+          property: host
+      - key: API_UPSTREAM_PORT
+        fromService:
+          type: web
+          name: vigil-summit-api
+          property: port
+
+  - type: web
+    runtime: docker
+    name: vigil-summit-api
+    plan: starter
+    region: ohio
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: node apps/api/dist/main.js
+    preDeployCommand: pnpm --filter @flowpilot/api exec prisma migrate deploy --schema prisma/schema.prisma
+    initialDeployHook: pnpm --filter @flowpilot/api seed:vigil
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: API_HOST
+        value: 0.0.0.0
+      - key: API_PORT
+        value: 10000
+      - key: CORS_ORIGIN
+        value: https://vigil-summit-web.onrender.com
+      - key: PUBLIC_APP_URL
+        value: https://vigil-summit-web.onrender.com
+      - key: DATABASE_URL
+        fromDatabase:
+          name: vigil-summit-postgres
+          property: connectionString
+      - key: RABBITMQ_HOST
+        value: vigil-summit-rabbitmq
+      - key: RABBITMQ_PORT
+        value: 5672
+      - key: RABBITMQ_USER
+        value: vigil
+      - key: RABBITMQ_PASSWORD
+        fromService:
+          type: pserv
+          name: vigil-summit-rabbitmq
+          envVarKey: RABBITMQ_DEFAULT_PASS
+      - key: REDIS_URL
+        value: redis://unused:6379
+      - key: QDRANT_URL
+        value: http://unused:6333
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CREDENTIAL_ENCRYPTION_KEY
+        generateValue: true
+      - key: INTERNAL_API_TOKEN
+        generateValue: true
+      - key: WEBHOOK_SIGNING_SECRET
+        generateValue: true
+      - key: DEMO_ADMIN_EMAIL
+        value: demo-admin@vigil.test
+      - key: DEMO_ADMIN_PASSWORD
+        generateValue: true
+      - key: CALENDAR_PROVIDER
+        value: google
+      - key: GOOGLE_CALENDAR_ACCESS_TOKEN
+        sync: false
+      - key: GOOGLE_CALENDAR_ID
+        value: primary
+
+  - type: worker
+    runtime: docker
+    name: vigil-summit-worker
+    plan: starter
+    region: ohio
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: node apps/execution-worker/dist/index.js
+    maxShutdownDelaySeconds: 60
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: vigil-summit-postgres
+          property: connectionString
+      - key: RABBITMQ_HOST
+        value: vigil-summit-rabbitmq
+      - key: RABBITMQ_PORT
+        value: 5672
+      - key: RABBITMQ_USER
+        value: vigil
+      - key: RABBITMQ_PASSWORD
+        fromService:
+          type: pserv
+          name: vigil-summit-rabbitmq
+          envVarKey: RABBITMQ_DEFAULT_PASS
+      - key: REDIS_URL
+        value: redis://unused:6379
+      - key: QDRANT_URL
+        value: http://unused:6333
+      - key: AI_ORCHESTRATOR_URL
+        value: http://vigil-summit-ai:10000
+      - key: PUBLIC_APP_URL
+        value: https://vigil-summit-web.onrender.com
+      - key: EMAIL_PROVIDER
+        value: resend
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
+      - key: ENRICHMENT_PROVIDER
+        value: apollo
+      - key: APOLLO_API_KEY
+        sync: false
+      - key: ENGAGEMENT_AI_PROVIDER
+        value: anthropic
+      - key: ENGAGEMENT_AI_MODEL
+        value: claude-sonnet-4-6
+
+  - type: pserv
+    runtime: docker
+    name: vigil-summit-ai
+    plan: starter
+    region: ohio
+    dockerfilePath: ./apps/ai-orchestrator/Dockerfile
+    dockerContext: ./apps/ai-orchestrator
+    dockerCommand: uvicorn flowpilot_ai_orchestrator.main:app --host 0.0.0.0 --port 10000
+    envVars:
+      - key: FLOWPILOT_API_URL
+        value: http://vigil-summit-api:10000/api
+      - key: FLOWPILOT_INTERNAL_API_TOKEN
+        fromService:
+          type: web
+          name: vigil-summit-api
+          envVarKey: INTERNAL_API_TOKEN
+      - key: ANTHROPIC_API_KEY
+        sync: false
+
+  - type: pserv
+    runtime: docker
+    name: vigil-summit-rabbitmq
+    plan: starter
+    region: ohio
+    dockerfilePath: ./deploy/rabbitmq/Dockerfile
+    dockerContext: ./deploy/rabbitmq
+    envVars:
+      - key: RABBITMQ_DEFAULT_USER
+        value: vigil
+      - key: RABBITMQ_DEFAULT_PASS
+        generateValue: true
+      - key: RABBITMQ_ERLANG_COOKIE
+        generateValue: true
+    disk:
+      name: rabbitmq-data
+      mountPath: /var/lib/rabbitmq
+      sizeGB: 10
+
+databases:
+  - name: vigil-summit-postgres
+    databaseName: vigil_summit
+    user: vigil
+    plan: basic-256mb
+    region: ohio
+    ipAllowList: []

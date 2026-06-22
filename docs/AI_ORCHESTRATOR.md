@@ -18,7 +18,7 @@ workspace credential service, not from prompts or database query results.
 ```dotenv
 ENGAGEMENT_AI_PROVIDER=anthropic
 ENGAGEMENT_AI_CREDENTIAL_ID=<credential-id>
-ENGAGEMENT_AI_MODEL=claude-sonnet-4-20250514
+ENGAGEMENT_AI_MODEL=claude-sonnet-4-6
 ```
 
 ## Guardrails

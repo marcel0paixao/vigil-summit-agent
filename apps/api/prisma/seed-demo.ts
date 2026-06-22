@@ -133,7 +133,7 @@ const incidentTriageDefinition = {
     {
       id: "final-output",
       type: WORKFLOW_NODE_TYPES.transformAction,
-      name: "Portfolio Output",
+      name: "Incident Output",
       config: {
         mode: "pick",
         pick: ["summary", "provider", "model", "tokens", "trace"]
@@ -360,7 +360,7 @@ async function main() {
       name: "Demo - Real AI Incident Triage",
       slug: "demo-real-ai-incident-triage",
       description:
-        "Portfolio workflow that normalizes an incident, evaluates severity, enriches context, calls an AI prompt node, and records execution observability.",
+        "Reference workflow that normalizes an incident, evaluates severity, enriches context, calls an AI prompt node, and records execution observability.",
       versions: {
         create: {
           version: 1,
@@ -371,7 +371,7 @@ async function main() {
     update: {
       name: "Demo - Real AI Incident Triage",
       description:
-        "Portfolio workflow that normalizes an incident, evaluates severity, enriches context, calls an AI prompt node, and records execution observability."
+        "Reference workflow that normalizes an incident, evaluates severity, enriches context, calls an AI prompt node, and records execution observability."
     }
   });
 
@@ -400,9 +400,9 @@ async function main() {
   console.log(`Workflow: ${workflow.name}`);
   console.log(`Workflow ID: ${workflow.id}`);
   console.log(`Workflow slug: ${workflow.slug}`);
-  console.log(`Portfolio workflow: ${incidentTriageWorkflow.name}`);
-  console.log(`Portfolio workflow ID: ${incidentTriageWorkflow.id}`);
-  console.log(`Portfolio workflow slug: ${incidentTriageWorkflow.slug}`);
+  console.log(`Reference workflow: ${incidentTriageWorkflow.name}`);
+  console.log(`Reference workflow ID: ${incidentTriageWorkflow.id}`);
+  console.log(`Reference workflow slug: ${incidentTriageWorkflow.slug}`);
   console.log("Seeded credential: Demo Claude key / claude / placeholder secret");
   console.log("Seeded credential: Demo Gemini key / gemini / placeholder secret");
   console.log("");
