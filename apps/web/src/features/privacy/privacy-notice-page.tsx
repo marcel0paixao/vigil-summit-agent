@@ -1,0 +1,5 @@
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
+
+export function PrivacyNoticePage() {
+  return <main className="mx-auto min-h-screen max-w-3xl p-6"><Card><CardHeader><CardTitle>Vigil Summit privacy notice</CardTitle></CardHeader><CardContent className="space-y-4 text-sm leading-6"><p>Registration data is used to manage event participation and event communications. Commercial follow-up is optional and recorded as a separate purpose.</p><p>We store declared data, enrichment provenance, interaction signals, consent history and operational messages. Access is restricted to authorized workspace operators.</p><p>You may request access, correction, export, consent withdrawal or deletion. Deletion anonymizes conversion metrics while removing identifying and conversational data.</p><p>Operational data defaults to 90 days after the event. The final retention period and legal basis are defined by the data controller before production use.</p><p>Version: 2026-06-21. Contact the event organizer through the address used for your invitation to exercise data-subject rights.</p></CardContent></Card></main>;
+}

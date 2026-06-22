@@ -1,0 +1,965 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Workspace {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members                WorkspaceMember[]
+  workflows              Workflow[]
+  workflowExecutions     WorkflowExecution[]
+  integrationCredentials IntegrationCredential[]
+  aiTraces               WorkflowAiTrace[]
+  events                 Event[]
+  leads                  Lead[]
+  registrations          Registration[]
+  consentRecords         ConsentRecord[]
+  enrichmentSnapshots    EnrichmentSnapshot[]
+  interestSignals        InterestSignal[]
+  leadQualifications     LeadQualification[]
+  cadenceEnrollments     CadenceEnrollment[]
+  scheduledActions       ScheduledAction[]
+  conversations          Conversation[]
+  messages               Message[]
+  agentDecisions         AgentDecision[]
+  meetings               Meeting[]
+  suppressions           Suppression[]
+  webhookReceipts        WebhookReceipt[]
+  privacyRequests        PrivacyRequest[]
+  auditEvents            AuditEvent[]
+  publicActionTokens     PublicActionToken[]
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  displayName  String
+  passwordHash String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships                 WorkspaceMember[]
+  requestedWorkflowExecutions WorkflowExecution[]
+  integrationCredentials      IntegrationCredential[]
+}
+
+model IntegrationCredential {
+  id              String    @id @default(uuid())
+  workspaceId     String
+  createdByUserId String?
+  name            String
+  type            String
+  kind            String
+  capabilities    String[]
+  encryptedValue  String
+  iv              String
+  authTag         String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  lastUsedAt      DateTime?
+
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdByUser User?     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, type, name])
+  @@index([workspaceId])
+  @@index([type])
+  @@index([kind])
+  @@index([createdByUserId])
+}
+
+model WorkspaceMember {
+  id          String        @id @default(uuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole @default(MEMBER)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model Workflow {
+  id          String         @id @default(uuid())
+  workspaceId String
+  name        String
+  slug        String
+  description String?
+  status      WorkflowStatus @default(DRAFT)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  workspace  Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  versions   WorkflowVersion[]
+  executions WorkflowExecution[]
+  aiTraces   WorkflowAiTrace[]
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId])
+}
+
+model WorkflowVersion {
+  id         String   @id @default(uuid())
+  workflowId String
+  version    Int
+  definition Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  workflow   Workflow            @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  executions WorkflowExecution[]
+
+  @@unique([workflowId, version])
+  @@index([workflowId])
+}
+
+model WorkflowExecution {
+  id                String                  @id @default(uuid())
+  workspaceId       String
+  workflowId        String
+  workflowVersionId String
+  requestedByUserId String?
+  status            WorkflowExecutionStatus @default(PENDING)
+  input             Json
+  output            Json?
+  error             Json?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  workspace       Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workflow        Workflow                 @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  workflowVersion WorkflowVersion          @relation(fields: [workflowVersionId], references: [id], onDelete: Restrict)
+  requestedBy     User?                    @relation(fields: [requestedByUserId], references: [id], onDelete: SetNull)
+  events          WorkflowExecutionEvent[]
+  nodeExecutions  WorkflowNodeExecution[]
+  aiTraces        WorkflowAiTrace[]
+
+  @@index([workspaceId])
+  @@index([workflowId])
+  @@index([workflowVersionId])
+  @@index([requestedByUserId])
+  @@index([status])
+}
+
+model WorkflowNodeExecution {
+  id          String                      @id @default(uuid())
+  workspaceId String
+  workflowId  String
+  executionId String
+  nodeId      String
+  nodeType    String
+  status      WorkflowNodeExecutionStatus @default(PENDING)
+  input       Json
+  output      Json?
+  error       Json?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime                    @default(now())
+  updatedAt   DateTime                    @updatedAt
+
+  workflowExecution WorkflowExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  aiTraces          WorkflowAiTrace[]
+
+  @@unique([executionId, nodeId])
+  @@index([workspaceId])
+  @@index([workflowId])
+  @@index([executionId])
+  @@index([status])
+}
+
+model OutboxMessage {
+  id             String              @id @default(uuid())
+  exchange       String
+  routingKey     String
+  eventName      String
+  messageId      String              @unique
+  idempotencyKey String              @unique
+  payload        Json
+  headers        Json?
+  status         OutboxMessageStatus @default(PENDING)
+  attempts       Int                 @default(0)
+  lastError      String?
+  publishedAt    DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([status, createdAt])
+  @@index([eventName])
+}
+
+model WorkflowExecutionEvent {
+  id          String   @id @default(uuid())
+  workspaceId String
+  workflowId  String
+  executionId String
+  eventName   String
+  eventId     String   @unique
+  occurredAt  DateTime
+  producer    String
+  payload     Json
+  createdAt   DateTime @default(now())
+
+  workflowExecution WorkflowExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([workflowId])
+  @@index([executionId, occurredAt])
+  @@index([eventName])
+}
+
+model Event {
+  id               String      @id @default(uuid())
+  workspaceId      String
+  name             String
+  slug             String
+  description      String?
+  location         String?
+  startsAt         DateTime
+  endsAt           DateTime?
+  timezone         String
+  capacity         Int         @default(120)
+  status           EventStatus @default(DRAFT)
+  audienceProfile  Json?
+  agenda           Json?
+  companionEnabled Boolean     @default(false)
+  maxCompanions    Int         @default(0)
+  retentionDays    Int         @default(90)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  workspace           Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  registrations       Registration[]
+  consentRecords      ConsentRecord[]
+  enrichmentSnapshots EnrichmentSnapshot[]
+  interestSignals     InterestSignal[]
+  qualifications      LeadQualification[]
+  cadenceEnrollments  CadenceEnrollment[]
+  conversations       Conversation[]
+  messages            Message[]
+  agentDecisions      AgentDecision[]
+  meetings            Meeting[]
+  publicActionTokens  PublicActionToken[]
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId])
+  @@index([status, startsAt])
+}
+
+model Lead {
+  id                  String     @id @default(uuid())
+  workspaceId         String
+  fullName            String
+  workEmail           String
+  normalizedWorkEmail String
+  jobTitle            String?
+  companyName         String
+  companyDomain       String?
+  source              LeadSource @default(REGISTRATION_FORM)
+  suppressedAt        DateTime?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  workspace           Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  registrations       Registration[]
+  consentRecords      ConsentRecord[]
+  enrichmentSnapshots EnrichmentSnapshot[]
+  interestSignals     InterestSignal[]
+  qualifications      LeadQualification[]
+  cadenceEnrollments  CadenceEnrollment[]
+  conversations       Conversation[]
+  messages            Message[]
+  agentDecisions      AgentDecision[]
+  meetings            Meeting[]
+  suppressions        Suppression[]
+  privacyRequests     PrivacyRequest[]
+  auditEvents         AuditEvent[]
+  publicActionTokens  PublicActionToken[]
+
+  @@unique([workspaceId, normalizedWorkEmail])
+  @@index([workspaceId])
+  @@index([companyDomain])
+  @@index([suppressedAt])
+}
+
+model Registration {
+  id             String             @id @default(uuid())
+  workspaceId    String
+  eventId        String
+  leadId         String
+  status         RegistrationStatus @default(REGISTERED)
+  interestTopics String[]           @default([])
+  registeredAt   DateTime           @default(now())
+  confirmedAt    DateTime?
+  declinedAt     DateTime?
+  attendedAt     DateTime?
+  guestCount     Int                @default(0)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  event              Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  lead               Lead                @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  enrichmentSnapshot EnrichmentSnapshot?
+  interestSignals    InterestSignal[]
+  qualification      LeadQualification?
+  cadenceEnrollment  CadenceEnrollment?
+  conversation       Conversation?
+  agentDecisions     AgentDecision[]
+  meetings           Meeting[]
+  publicActionTokens PublicActionToken[]
+
+  @@unique([eventId, leadId])
+  @@index([workspaceId])
+  @@index([eventId, status])
+  @@index([leadId])
+}
+
+model ConsentRecord {
+  id              String               @id @default(uuid())
+  workspaceId     String
+  eventId         String
+  leadId          String
+  purpose         ConsentPurpose
+  legalBasis      ConsentLegalBasis
+  channel         CommunicationChannel
+  noticeVersion   String
+  source          String
+  grantedAt       DateTime             @default(now())
+  withdrawnAt     DateTime?
+  withdrawnReason String?
+  createdAt       DateTime             @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  event     Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  lead      Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([eventId])
+  @@index([leadId, purpose, channel])
+  @@index([withdrawnAt])
+}
+
+model EnrichmentSnapshot {
+  id                     String           @id @default(uuid())
+  workspaceId            String
+  eventId                String
+  leadId                 String
+  registrationId         String           @unique
+  provider               String
+  providerVersion        String
+  status                 EnrichmentStatus @default(PENDING)
+  jobTitle               String?
+  seniority              String?
+  roleCategory           String?
+  companyName            String?
+  companyDomain          String?
+  companyIndustry        String?
+  companyEmployeeRange   String?
+  professionalProfileUrl String?
+  securitySignals        String[]         @default([])
+  confidence             Float?
+  evidence               Json?
+  providerPayload        Json?
+  errorCode              String?
+  errorMessage           String?
+  startedAt              DateTime?
+  completedAt            DateTime?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+
+  workspace       Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  event           Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  lead            Lead                @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  registration    Registration        @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  interestSignals InterestSignal[]
+  qualifications  LeadQualification[]
+
+  @@index([workspaceId])
+  @@index([eventId])
+  @@index([leadId, createdAt])
+  @@index([status, createdAt])
+}
+
+model InterestSignal {
+  id                   String               @id @default(uuid())
+  workspaceId          String
+  eventId              String
+  leadId               String
+  registrationId       String
+  enrichmentSnapshotId String?
+  source               InterestSignalSource
+  kind                 String
+  value                String
+  confidence           Float
+  evidence             Json?
+  occurredAt           DateTime             @default(now())
+  createdAt            DateTime             @default(now())
+
+  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  event              Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  lead               Lead                @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  registration       Registration        @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  enrichmentSnapshot EnrichmentSnapshot? @relation(fields: [enrichmentSnapshotId], references: [id], onDelete: Cascade)
+
+  @@unique([registrationId, source, kind, value])
+  @@index([workspaceId])
+  @@index([eventId, occurredAt])
+  @@index([leadId, occurredAt])
+  @@index([enrichmentSnapshotId])
+}
+
+model LeadQualification {
+  id             String              @id @default(uuid())
+  workspaceId    String
+  eventId        String
+  leadId         String
+  registrationId String              @unique
+  snapshotId     String?
+  status         QualificationStatus
+  score          Int
+  reasonCodes    String[]            @default([])
+  policyVersion  String
+  evaluatedAt    DateTime            @default(now())
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  workspace    Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  event        Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  lead         Lead                @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  registration Registration        @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  snapshot     EnrichmentSnapshot? @relation(fields: [snapshotId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([eventId, status])
+  @@index([leadId])
+  @@index([score])
+}
+
+model CadenceEnrollment {
+  id             String                  @id @default(uuid())
+  workspaceId    String
+  eventId        String
+  leadId         String
+  registrationId String                  @unique
+  phase          CadencePhase
+  status         CadenceEnrollmentStatus @default(ACTIVE)
+  currentStep    Int                     @default(0)
+  nextActionAt   DateTime?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  event            Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  lead             Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  registration     Registration      @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  scheduledActions ScheduledAction[]
+
+  @@index([workspaceId])
+  @@index([eventId, status])
+  @@index([status, nextActionAt])
+}
+
+model ScheduledAction {
+  id             String                @id @default(uuid())
+  workspaceId    String
+  enrollmentId   String
+  type           ScheduledActionType
+  status         ScheduledActionStatus @default(PENDING)
+  dueAt          DateTime
+  payload        Json
+  idempotencyKey String                @unique
+  attempts       Int                   @default(0)
+  leaseUntil     DateTime?
+  lastError      String?
+  completedAt    DateTime?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  workspace  Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  enrollment CadenceEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([status, dueAt])
+  @@index([enrollmentId])
+}
+
+model Conversation {
+  id             String             @id @default(uuid())
+  workspaceId    String
+  eventId        String
+  leadId         String
+  registrationId String             @unique
+  status         ConversationStatus @default(OPEN)
+  lastMessageAt  DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  workspace      Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  event          Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  lead           Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  messages       Message[]
+  summary        String?
+  summaryVersion String?
+
+  @@index([workspaceId])
+  @@index([eventId, status])
+  @@index([leadId])
+}
+
+model Message {
+  id                String               @id @default(uuid())
+  workspaceId       String
+  eventId           String
+  leadId            String
+  conversationId    String
+  direction         MessageDirection
+  channel           CommunicationChannel
+  purpose           ConsentPurpose
+  status            MessageStatus        @default(DRAFT)
+  subject           String?
+  body              String
+  providerMessageId String?              @unique
+  scheduledAt       DateTime?
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  failedAt          DateTime?
+  failureCode       String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  event        Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  lead         Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  conversation Conversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  events       MessageEvent[]
+
+  @@index([workspaceId])
+  @@index([conversationId, createdAt])
+  @@index([status, scheduledAt])
+}
+
+model AgentDecision {
+  id             String              @id @default(uuid())
+  workspaceId    String
+  eventId        String
+  leadId         String
+  registrationId String
+  action         String
+  status         AgentDecisionStatus
+  reasonCodes    String[]            @default([])
+  rationale      String
+  input          Json
+  output         Json?
+  policyVersion  String
+  model          String?
+  promptVersion  String?
+  contextHash    String?
+  policyResult   Json?
+  createdAt      DateTime            @default(now())
+
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  event        Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  lead         Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([registrationId, createdAt])
+  @@index([status, createdAt])
+}
+
+model Meeting {
+  id                String        @id @default(uuid())
+  workspaceId       String
+  eventId           String
+  leadId            String
+  registrationId    String
+  status            MeetingStatus @default(PROPOSED)
+  startsAt          DateTime?
+  endsAt            DateTime?
+  timezone          String?
+  provider          String?
+  providerMeetingId String?       @unique
+  bookingUrl        String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  event        Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  lead         Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([eventId, status])
+  @@index([leadId])
+}
+
+model Suppression {
+  id          String               @id @default(uuid())
+  workspaceId String
+  leadId      String
+  purpose     ConsentPurpose
+  channel     CommunicationChannel
+  reason      String
+  active      Boolean              @default(true)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  lead      Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, leadId, purpose, channel])
+  @@index([workspaceId, active])
+  @@index([leadId])
+}
+
+model PublicActionToken {
+  id             String           @id @default(uuid())
+  workspaceId    String
+  eventId        String
+  leadId         String
+  registrationId String
+  tokenHash      String           @unique
+  action         PublicActionType
+  purpose        ConsentPurpose
+  expiresAt      DateTime
+  consumedAt     DateTime?
+  createdAt      DateTime         @default(now())
+
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  event        Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  lead         Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@index([registrationId, action])
+  @@index([expiresAt])
+}
+
+model MessageEvent {
+  id              String           @id @default(uuid())
+  messageId       String
+  type            MessageEventType
+  providerEventId String           @unique
+  occurredAt      DateTime
+  metadata        Json?
+  createdAt       DateTime         @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId, occurredAt])
+  @@index([type, occurredAt])
+}
+
+model WebhookReceipt {
+  id              String    @id @default(uuid())
+  workspaceId     String?
+  provider        String
+  providerEventId String
+  eventType       String
+  payloadHash     String
+  processedAt     DateTime?
+  createdAt       DateTime  @default(now())
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerEventId])
+  @@index([processedAt, createdAt])
+}
+
+model PublicRateLimit {
+  id          String   @id @default(uuid())
+  keyHash     String
+  windowStart DateTime
+  count       Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([keyHash, windowStart])
+  @@index([windowStart])
+}
+
+model PrivacyRequest {
+  id          String               @id @default(uuid())
+  workspaceId String
+  leadId      String
+  type        PrivacyRequestType
+  status      PrivacyRequestStatus @default(COMPLETED)
+  requestedAt DateTime             @default(now())
+  completedAt DateTime?
+  metadata    Json?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  lead      Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, requestedAt])
+  @@index([leadId, requestedAt])
+}
+
+model AuditEvent {
+  id          String   @id @default(uuid())
+  workspaceId String
+  leadId      String?
+  actorType   String
+  actorId     String?
+  action      String
+  resource    String
+  resourceId  String?
+  metadata    Json?
+  occurredAt  DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  lead      Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, occurredAt])
+  @@index([leadId, occurredAt])
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum WorkflowStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum WorkflowExecutionStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum WorkflowNodeExecutionStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  SKIPPED
+}
+
+enum OutboxMessageStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+}
+
+enum AiTraceStatus {
+  SUCCEEDED
+  FAILED
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  LIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum LeadSource {
+  REGISTRATION_FORM
+  ADMIN_IMPORT
+  DEMO
+}
+
+enum RegistrationStatus {
+  REGISTERED
+  WAITLISTED
+  CONFIRMED
+  DECLINED
+  ATTENDED
+  NO_SHOW
+}
+
+enum ConsentPurpose {
+  EVENT_COMMUNICATION
+  COMMERCIAL_FOLLOW_UP
+}
+
+enum ConsentLegalBasis {
+  CONSENT
+  LEGITIMATE_INTEREST
+}
+
+enum CommunicationChannel {
+  EMAIL
+}
+
+enum EnrichmentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum InterestSignalSource {
+  DECLARED
+  ENRICHED
+  OBSERVED
+  INFERRED
+}
+
+enum QualificationStatus {
+  QUALIFIED
+  REVIEW
+  DISQUALIFIED
+}
+
+enum CadencePhase {
+  PRE_EVENT
+  POST_EVENT
+}
+
+enum CadenceEnrollmentStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum ScheduledActionType {
+  AGENT_DECISION
+  SEND_MESSAGE
+  FOLLOW_UP
+  REQUEST_CONFIRMATION
+  REQUEST_FEEDBACK
+  PROPOSE_MEETING
+}
+
+enum ScheduledActionStatus {
+  PENDING
+  DISPATCHING
+  DISPATCHED
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ConversationStatus {
+  OPEN
+  QUALIFIED
+  HANDOFF
+  CLOSED
+  SUPPRESSED
+}
+
+enum MessageDirection {
+  OUTBOUND
+  INBOUND
+}
+
+enum MessageStatus {
+  DRAFT
+  SCHEDULED
+  SENT
+  DELIVERED
+  FAILED
+  BOUNCED
+  SUPPRESSED
+}
+
+enum MessageEventType {
+  SENT
+  DELIVERED
+  OPENED
+  CLICKED
+  BOUNCED
+  COMPLAINED
+}
+
+enum PublicActionType {
+  CONFIRM
+  DECLINE
+  UNSUBSCRIBE
+}
+
+enum PrivacyRequestType {
+  EXPORT
+  DELETE
+  WITHDRAW_CONSENT
+}
+
+enum PrivacyRequestStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum AgentDecisionStatus {
+  PROPOSED
+  APPROVED
+  REJECTED
+  EXECUTED
+  FAILED
+}
+
+enum MeetingStatus {
+  PROPOSED
+  BOOKED
+  CANCELLED
+  COMPLETED
+}
+
+model WorkflowAiTrace {
+  id                  String        @id @default(uuid())
+  workspaceId         String
+  workflowId          String?
+  workflowExecutionId String?
+  nodeExecutionId     String?
+  nodeId              String?
+  credentialId        String?
+  provider            String
+  model               String
+  status              AiTraceStatus
+  latencyMs           Int
+  providerLatencyMs   Int?
+  finishReason        String?
+  inputTokenCount     Int           @default(0)
+  outputTokenCount    Int           @default(0)
+  totalTokenCount     Int           @default(0)
+  estimatedCostUsd    Decimal?      @db.Decimal(12, 6)
+  inputSizeBytes      Int?
+  outputSizeBytes     Int?
+  schemaValid         Boolean?
+  errorCode           String?
+  errorMessage        String?
+  providerStatusCode  Int?
+  retryable           Boolean?
+  createdAt           DateTime      @default(now())
+
+  workspace         Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workflow          Workflow?              @relation(fields: [workflowId], references: [id], onDelete: SetNull)
+  workflowExecution WorkflowExecution?     @relation(fields: [workflowExecutionId], references: [id], onDelete: SetNull)
+  nodeExecution     WorkflowNodeExecution? @relation(fields: [nodeExecutionId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([workflowId])
+  @@index([workflowExecutionId])
+  @@index([nodeExecutionId])
+  @@index([nodeId])
+  @@index([credentialId])
+  @@index([provider])
+  @@index([provider, model])
+  @@index([status])
+  @@index([createdAt])
+}

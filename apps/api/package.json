@@ -1,0 +1,53 @@
+{
+  "name": "@flowpilot/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "pnpm typecheck",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
+    "prisma:migrate:dev": "prisma migrate dev --schema prisma/schema.prisma",
+    "prisma:validate": "prisma validate --schema prisma/schema.prisma",
+    "seed:demo": "tsx prisma/seed-demo.ts",
+    "seed:vigil": "tsx prisma/seed-vigil.ts",
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "test:integration": "sh -c 'docker compose -f ../../docker-compose.yml exec -T postgres createdb -U vigil vigil_test 2>/dev/null || true; DATABASE_URL=${TEST_DATABASE_URL:-postgresql://vigil:vigil@localhost:5433/vigil_test} prisma migrate deploy --schema prisma/schema.prisma && NODE_ENV=test JWT_SECRET=replace-with-local-development-secret DATABASE_URL=${TEST_DATABASE_URL:-postgresql://vigil:vigil@localhost:5433/vigil_test} tsx --test \"src/**/*.integration-spec.ts\"'",
+    "test:integration:container": "prisma migrate deploy --schema prisma/schema.prisma && tsx --test \"src/**/*.integration-spec.ts\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/static": "^9.1.3",
+    "@flowpilot/config": "workspace:*",
+    "@flowpilot/contracts": "workspace:*",
+    "@flowpilot/logger": "workspace:*",
+    "@nestjs/common": "^11.1.19",
+    "@nestjs/config": "^4.0.4",
+    "@nestjs/core": "^11.1.19",
+    "@nestjs/jwt": "^11.0.2",
+    "@nestjs/microservices": "^11.1.19",
+    "@nestjs/platform-fastify": "^11.1.19",
+    "@nestjs/swagger": "^11.4.2",
+    "@prisma/client": "^6.19.3",
+    "amqp-connection-manager": "^5.0.0",
+    "amqplib": "^1.0.3",
+    "bcryptjs": "^3.0.3",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "dotenv": "^17.4.2",
+    "fastify": "^5.8.4",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/amqplib": "^0.10.8",
+    "prisma": "^6.19.3",
+    "tsx": "^4.21.0"
+  }
+}

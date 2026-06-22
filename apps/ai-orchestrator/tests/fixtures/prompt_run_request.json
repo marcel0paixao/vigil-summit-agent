@@ -1,0 +1,20 @@
+{
+  "context": {
+    "workspaceId": "workspace-1",
+    "workflowId": "workflow-1",
+    "executionId": "execution-1",
+    "nodeExecutionId": "node-execution-1",
+    "nodeId": "ai-node",
+    "correlationId": "correlation-1"
+  },
+  "config": {
+    "prompt": "Summarize this lead.",
+    "provider": "deterministic",
+    "model": "mock-flowpilot-llm",
+    "temperature": 0.2
+  },
+  "input": {
+    "leadId": "lead-1",
+    "email": "lead@example.test"
+  }
+}

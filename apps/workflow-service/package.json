@@ -1,0 +1,25 @@
+{
+  "name": "@flowpilot/workflow-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "pnpm typecheck",
+    "dev": "tsx watch src/index.ts",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@flowpilot/config": "workspace:*",
+    "@flowpilot/contracts": "workspace:*",
+    "@flowpilot/logger": "workspace:*",
+    "@prisma/client": "^6.19.3",
+    "amqplib": "^1.0.3"
+  },
+  "devDependencies": {
+    "@types/amqplib": "^0.10.8",
+    "tsx": "^4.21.0"
+  }
+}

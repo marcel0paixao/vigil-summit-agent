@@ -1,0 +1,143 @@
+name: vigil-summit
+
+x-node-service: &node-service
+  image: node:22-alpine
+  working_dir: /workspace
+  restart: unless-stopped
+  volumes:
+    - .:/workspace
+    - root-node-modules:/workspace/node_modules
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: vigil
+      POSTGRES_USER: vigil
+      POSTGRES_PASSWORD: vigil
+    ports: ["5433:5432"]
+    volumes: ["postgres-data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vigil -d vigil"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: vigil
+      RABBITMQ_DEFAULT_PASS: vigil
+    ports: ["5672:5672", "15672:15672"]
+    volumes: ["rabbitmq-data:/var/lib/rabbitmq"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  ai-orchestrator:
+    image: vigil-summit-ai-orchestrator:local
+    build:
+      context: ./apps/ai-orchestrator
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["sh", "-c", "pip install --disable-pip-version-check --no-cache-dir 'anthropic>=0.105.0,<1.0.0' && exec uvicorn flowpilot_ai_orchestrator.main:app --host 0.0.0.0 --port 8000"]
+    env_file: ["./apps/ai-orchestrator/.env"]
+    environment:
+      AI_ORCHESTRATOR_HOST: 0.0.0.0
+      AI_ORCHESTRATOR_PORT: 8000
+      FLOWPILOT_API_URL: http://api:3000/api
+      FLOWPILOT_INTERNAL_API_TOKEN: replace-with-local-internal-api-token
+    ports: ["8000:8000"]
+    volumes:
+      - ./apps/ai-orchestrator/src:/app/src:ro
+      - ./apps/ai-orchestrator/tests:/app/tests:ro
+      - ai-python-packages:/usr/local/lib/python3.12/site-packages
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  api:
+    <<: *node-service
+    command: ["sh", "-c", "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @flowpilot/contracts build && pnpm --filter @flowpilot/api prisma:generate && pnpm --filter @flowpilot/api exec prisma migrate deploy --schema prisma/schema.prisma && pnpm --filter @flowpilot/api seed:vigil && pnpm --filter @flowpilot/api dev"]
+    environment:
+      NODE_ENV: development
+      API_HOST: 0.0.0.0
+      API_PORT: 3000
+      CORS_ORIGIN: http://localhost:5173
+      DATABASE_URL: postgresql://vigil:vigil@postgres:5432/vigil
+      RABBITMQ_URL: amqp://vigil:vigil@rabbitmq:5672
+      REDIS_URL: redis://unused:6379
+      QDRANT_URL: http://unused:6333
+      JWT_SECRET: replace-with-local-development-secret
+      CREDENTIAL_ENCRYPTION_KEY: replace-with-local-encryption-secret
+      INTERNAL_API_TOKEN: replace-with-local-internal-api-token
+      WEBHOOK_SIGNING_SECRET: replace-with-local-webhook-signing-secret
+      CALENDAR_PROVIDER: ${CALENDAR_PROVIDER:-demo}
+      GOOGLE_CALENDAR_ACCESS_TOKEN: ${GOOGLE_CALENDAR_ACCESS_TOKEN:-}
+      GOOGLE_CALENDAR_ID: ${GOOGLE_CALENDAR_ID:-primary}
+    ports: ["3000:3000"]
+    volumes:
+      - .:/workspace
+      - root-node-modules:/workspace/node_modules
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)})"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  execution-worker:
+    <<: *node-service
+    command: ["sh", "-c", "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @flowpilot/contracts build && pnpm --filter @flowpilot/config build && pnpm --filter @flowpilot/api prisma:generate && pnpm --filter @flowpilot/execution-worker dev"]
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://vigil:vigil@postgres:5432/vigil
+      RABBITMQ_URL: amqp://vigil:vigil@rabbitmq:5672
+      REDIS_URL: redis://unused:6379
+      QDRANT_URL: http://unused:6333
+      AI_ORCHESTRATOR_URL: http://ai-orchestrator:8000
+      AI_ORCHESTRATOR_TIMEOUT_MS: 30000
+      PUBLIC_APP_URL: http://localhost:5173
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-synthetic}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-Vigil Summit <summit@example.test>}
+      ENRICHMENT_PROVIDER: ${ENRICHMENT_PROVIDER:-synthetic}
+      APOLLO_API_KEY: ${APOLLO_API_KEY:-}
+      ENGAGEMENT_AI_PROVIDER: ${ENGAGEMENT_AI_PROVIDER:-deterministic}
+      ENGAGEMENT_AI_CREDENTIAL_ID: ${ENGAGEMENT_AI_CREDENTIAL_ID:-}
+      ENGAGEMENT_AI_MODEL: ${ENGAGEMENT_AI_MODEL:-claude-sonnet-4-20250514}
+    volumes:
+      - .:/workspace
+      - root-node-modules:/workspace/node_modules
+    depends_on:
+      api: { condition: service_healthy }
+      ai-orchestrator: { condition: service_healthy }
+
+  web:
+    <<: *node-service
+    command: ["sh", "-c", "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @flowpilot/contracts build && pnpm --filter @flowpilot/web dev"]
+    environment:
+      VITE_API_BASE_URL: http://localhost:3000/api
+    ports: ["5173:5173"]
+    volumes:
+      - .:/workspace
+      - root-node-modules:/workspace/node_modules
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5173').then(r=>{if(!r.ok)process.exit(1)})"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  root-node-modules:
+  postgres-data:
+  rabbitmq-data:
+  ai-python-packages:

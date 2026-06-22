@@ -1,0 +1,1 @@
+ALTER TABLE "PublicActionToken" ADD COLUMN "purpose" "ConsentPurpose" NOT NULL DEFAULT 'EVENT_COMMUNICATION';

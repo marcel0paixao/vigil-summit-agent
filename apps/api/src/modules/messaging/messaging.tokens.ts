@@ -1,0 +1,2 @@
+export const RABBITMQ_CLIENT = Symbol("RABBITMQ_CLIENT");
+export const MESSAGE_PUBLISHER = Symbol("MESSAGE_PUBLISHER");

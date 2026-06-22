@@ -1,0 +1,19 @@
+{
+  "name": "@flowpilot/observability-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "pnpm typecheck",
+    "dev": "tsc -p tsconfig.json --watch",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@flowpilot/config": "workspace:*",
+    "@flowpilot/contracts": "workspace:*",
+    "@flowpilot/logger": "workspace:*"
+  }
+}

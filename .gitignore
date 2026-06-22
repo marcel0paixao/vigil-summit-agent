@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.next/
+coverage/
+
+# Environment
+.env
+.env.*
+!.env.example
+apps/ai-orchestrator/.venv/
+
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+
+# Runtime data
+tmp/
+data/
+#Python
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+apps/ai-orchestrator/.venv/
+
